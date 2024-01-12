@@ -151,7 +151,7 @@ class MOSSETracker(object):
         dx = x_max_position - self.G_response.shape[1]
         dy = y_max_position - self.G_response.shape[0]
 
-        PSR = (max_response - torch.std(self.G_response).item()) / torch.mean(self.G_response).item()
+        PSR = (max_response - torch.std(self.G_response).item()) / torch.mean(self.G_response +  0.0001).item()
         if PSR >= self.PSR_thr:
             ok = True
             self.roi[0] += int(dx)
@@ -177,8 +177,13 @@ if __name__ == '__main__':
 
     video_path = 'E:\\test.mp4'
     cap = cv2.VideoCapture(video_path)
-
-
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    output_file = 'E:\\video.mp4'
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out = cv2.VideoWriter(output_file, fourcc, fps, (width, height), True)
     if not cap.isOpened():
         print("Error: Could not open video file.")
         exit()
@@ -195,7 +200,7 @@ if __name__ == '__main__':
     tracker.initialize(frame, tracked_object_roi)
     counter = 0
     while True:
-        print(counter)
+
         ret, frame = cap.read()
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         if not ret:
@@ -203,9 +208,11 @@ if __name__ == '__main__':
         roi, ok = tracker.tracking(frame)
         cv2.rectangle(frame, (roi[0], roi[1]), (roi[0] + roi[2], roi[1] + roi[3]), (255, 0, 0), 3)
         cv2.imshow("MOSSE tracker", frame)
+        out.write(frame)
         cv2.waitKey(1)
-        counter+=1
 
+
+    out.release()
 
 
 

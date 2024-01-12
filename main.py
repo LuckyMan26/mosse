@@ -21,7 +21,7 @@ def normalize_image(image):
 
 
 def random_affine_transform(image, center_point, scale_factor_range=(0.9, 1.1), rotation_range=(-10, 10)):
-    random_affine_transform = transforms.RandomAffine(degrees=(-3, 3), translate=(0.2, 0.2), scale=(0.8, 1.2))
+    random_affine_transform = transforms.RandomAffine(degrees=(-3, 3), translate=(0.2, 0.2), scale=(0.8, 1.2),center=center_point)
 
     transformed_image = random_affine_transform(image)
 
@@ -90,18 +90,27 @@ class MOSSETracker(object):
 
             affine_transform = random_affine_transform(tensor_to_pil, center)
 
-            self.F = torch.tensor(affine_transform[self.roi[1]:self.roi[1] + self.roi[3], self.roi[0]:self.roi[0] + self.roi[2]], dtype=torch.float32)
+            affine_transform = affine_transform.squeeze()
+            F = affine_transform[self.roi[1]:self.roi[1] + self.roi[3], self.roi[0]:self.roi[0] + self.roi[2]]
+
+
+            self.F = F
 
             self.F_fft = torch.fft.fft2(self.F)
+            print('F', self.F_fft)
+            print('G', self.G_fft)
             A_new += self.G_fft * self.F_fft
             B_new += self.F_fft * self.F_fft
+
             if learning_rate >= 1.0:
                 self.A = A_new
                 self.B = B_new
+                print('B', self.F_fft)
             else:
                 self.A = learning_rate * A_new + (1 - learning_rate) * self.A
                 self.B = learning_rate * B_new + (1 - learning_rate) * self.B
-            self.W_fft = np.divide(self.A, self.B)
+
+            self.W_fft = np.divide(self.A, self.B + 0.0001)
             counter += 1
 
     def initialize(self, image, roi):
@@ -112,7 +121,7 @@ class MOSSETracker(object):
 
         self.G_fft = torch.fft.fft2(self.G)
         self.train(self.image, 1.0)
-
+        #print(self.W_fft)
 
     def tracking(self, frame):
 
@@ -121,16 +130,22 @@ class MOSSETracker(object):
         transform = transforms.ToTensor()
         prev_object_neighbourhood = frame[self.roi[1]:self.roi[1] + self.roi[3],
                                     self.roi[0]:self.roi[0] + self.roi[2]]
-        F_tensor = transform(prev_object_neighbourhood)
+
+        F_tensor = (prev_object_neighbourhood)
         self.F = F_tensor
         mask = hanning_window_2d(F_tensor.shape[0], F_tensor.shape[1])
 
         self.apply_mask(mask)
         self.F_fft = torch.fft.fft2(self.F)
+
         self.G_response_fft = self.W_fft * self.F_fft
+
         self.G_response = torch.real(self.G_response_fft)
+
         max_response = self.G_response.max()
+
         self.g_max = np.where(self.G_response == max_response)
+
         x_max_position = int(np.mean(self.g_max[1]))
         y_max_position = int(np.mean(self.g_max[0]))
         dx = x_max_position - self.G_response.shape[1]
@@ -171,14 +186,25 @@ if __name__ == '__main__':
 
     ret,frame = cap.read()
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    cv2.imshow('Window',frame)
+
     tracked_object_roi = cv2.selectROI('frame', frame)
     tracker = MOSSETracker(roi=tracked_object_roi, learning_rate=0.2,
                            transforms_number=8,
                            psr_thr=5.7,
                            sigma=2)
     tracker.initialize(frame, tracked_object_roi)
-
+    counter = 0
+    while True:
+        print(counter)
+        ret, frame = cap.read()
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if not ret:
+            break
+        roi, ok = tracker.tracking(frame)
+        cv2.rectangle(frame, (roi[0], roi[1]), (roi[0] + roi[2], roi[1] + roi[3]), (255, 0, 0), 3)
+        cv2.imshow("MOSSE tracker", frame)
+        cv2.waitKey(1)
+        counter+=1
 
 
 

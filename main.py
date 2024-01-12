@@ -208,7 +208,7 @@ if __name__ == '__main__':
         roi, ok = tracker.tracking(frame)
         cv2.rectangle(frame, (roi[0], roi[1]), (roi[0] + roi[2], roi[1] + roi[3]), (255, 0, 0), 3)
         cv2.imshow("MOSSE tracker", frame)
-        out.write(frame)
+        out.write(cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR))
         cv2.waitKey(1)
 
 
